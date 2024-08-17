@@ -1,0 +1,4 @@
+string VertexShader = "basic.vert"
+string FragmentShader = "playerShadow.frag"
+bool UseShadowCutout = 0
+bool IsTranslucent = 1

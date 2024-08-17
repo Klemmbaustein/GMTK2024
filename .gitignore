@@ -1,0 +1,20 @@
+﻿################################################################################
+# This .gitignore file was automatically created by Microsoft(R) Visual Studio.
+################################################################################
+
+/Code/x64
+/Logs
+/.vs
+/Logs
+/bin
+/CSharp/Build
+/GameBuild
+/GeneratedIncludes
+/Scripts
+/x64
+*.dll
+*.sln
+*.bat
+*.user
+*.vcxproj
+/Shaders/x64

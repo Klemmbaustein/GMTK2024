@@ -1,0 +1,12 @@
+string VertexShader = "basic.vert"
+string FragmentShader = "water.frag"
+bool UseShadowCutout = 0
+bool IsTranslucent = 0
+vector3 u_waterColor = < 0.25 0.5 1 >
+vector3 u_brightWaterColor = < 0.3 0.7 1 >
+texture u_texture = 
+{
+	string File = "WaterNoise"
+	int Filtering = 0
+	int Wrap = 2
+}

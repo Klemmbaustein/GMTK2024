@@ -1,0 +1,6 @@
+string VertexShader = "skybox.vert"
+string FragmentShader = "skybox.frag"
+bool UseShadowCutout = 0
+bool IsTranslucent = 0
+vector3 u_skycolor = < 0.3 0.6 1 >
+vector3 u_horizoncolor = < 0.7 0.8 1 >
