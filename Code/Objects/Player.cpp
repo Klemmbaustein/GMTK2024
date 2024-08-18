@@ -8,6 +8,9 @@
 #include <Objects/PlayerShadow.h>
 #include <Rendering/Camera/CameraShake.h>
 #include "WaterPlane.h"
+#include <Engine/EngineError.h>
+
+
 
 void Player::Begin()
 {
@@ -20,21 +23,27 @@ void Player::Begin()
 	PlayerCamera->RelativeTransform.Position.Y = 1;
 	PlayerCamera->Use();
 
-	Attach(PlayerMesh);
-	PlayerMesh->Load("Cube");
-	PlayerMesh->CastStaticShadow = false;
-
 	Attach(CameraCollider);
 	CameraCollider->SetActive(false);
 	CameraCollider->CreateSphere(Transform(0, 0, 1), Physics::MotionType::Static, Physics::Layer::Static);
+	Attach(SmallJumpThrust);
+	Attach(MediumHoverEffect);
 #if EDITOR
 	return;
 #endif
+
+	LoadAnimations();
 
 	Objects::SpawnObject<PlayerShadow>(Transform())->Parent = this;
 
 	SlideEffects = Objects::SpawnObject<WallSlideEffects>(GetTransform());
 	LastSpawnPoint = GetTransform().Position;
+	SmallJumpThrust->LoadParticle("Thruster");
+	SmallJumpThrust->SetActive(false);
+
+	MediumHoverEffect->LoadParticle("Hover");
+	MediumHoverEffect->RelativeTransform.Position.Y = -2.5f;
+	MediumHoverEffect->SetActive(false);
 }
 
 void Player::Update()
@@ -98,62 +107,22 @@ void Player::Update()
 	}
 
 	HoldingJump = Input::IsKeyDown(Input::Key::SPACE);
-	if (HoldingJump || HoldingGamepadJump)
-	{
-		if (Movement->GetIsOnGround())
-		{
-			SpawnJumpParticles();
-			DoubleJumpTimer = 0.25f;
-			Movement->Jump();
-			IsJumping = true;
-			CameraShake::PlayDefaultCameraShake(1);
-		}
-		else if (!IsJumping && !HasDoubleJumped && DoubleJumpTimer <= 0 && !CanWallJump())
-		{
-			Vector3 Velocity = Movement->GetVelocity();
-			Movement->SetVelocity(Vector3(Velocity.X, 40 * Scale, Velocity.Z));
-			SpawnJumpParticles();
-			HasDoubleJumped = true;
-			IsJumping = true;
-			CameraShake::PlayDefaultCameraShake(1);
-		}
-	}
 
-	if (Movement->GetIsOnGround())
-	{
-		if (Movement->StoodOn && typeid(*Movement->StoodOn->GetParent()) == typeid(WaterPlane))
-		{
-			GetTransform().Position = LastSpawnPoint;
-			Movement->SetVelocity(0);
-		}
-		HasDoubleJumped = false;
-	}
+	CommonMovementLogic();
 
-	if (CanWallJump())
+	switch (Size)
 	{
-		SlideEffects->SetTransform(Transform(
-			GetTransform().Position - Movement->LastHitNormal,
-			Vector3::LookAtFunction(0, Movement->GetVelocity() * Vector3(1, 0, 1)),
-			1));
-
-		SlideEffects->StartSlide();
-		Vector3 vel = Movement->GetVelocity();
-		if ((HoldingJump || HoldingGamepadJump) && !IsJumping)
-		{
-			vel = (Movement->LastHitNormal + Vector3(0, 1, 0)) * 30 * Scale;
-			CameraShake::PlayDefaultCameraShake(1);
-			SlideEffects->WallJump();
-		}
-		else
-		{
-			vel -= Movement->LastHitNormal * Stats::DeltaTime * 10;
-		}
-		HasDoubleJumped = false;
-		Movement->SetVelocity(Vector3(vel.X, std::max(-3.0f, vel.Y), vel.Z));
-	}
-	else
-	{
-		SlideEffects->Stop();
+	case Player::RobotSize::Small:
+		SmallRobotLogic();
+		break;
+	case Player::RobotSize::Medium:
+		MediumRobotLogic();
+		break;
+	case Player::RobotSize::Large:
+		LargeRobotLogic();
+		break;
+	default:
+		break;
 	}
 
 	if (HoldingJump || HoldingGamepadJump)
@@ -170,7 +139,7 @@ void Player::Update()
 	ApplyScale();
 	UpdateAnimations();
 
-	Movement->Gravity = (HoldingJump || HoldingGamepadJump ? 50 : 100) * Scale;
+	Movement->Gravity = Landing ? 600 : (HoldingJump || HoldingGamepadJump ? 50 : 100) * Scale;
 
 	if (Input::IsKeyDown(Input::Key::k1))
 	{
@@ -199,37 +168,254 @@ void Player::GamepadInput(Input::Gamepad& Gamepad)
 	Movement->AddMovementInput(Vector3::GetRightVector(CameraRotation) * Gamepad.LeftStickPosition.X * 2);
 
 	PlayerCamera->RelativeTransform.Rotation += Vector3(Gamepad.RightStickPosition.Y, Gamepad.RightStickPosition.X, 0) * 200 * Stats::DeltaTime;
-
-}
-
-void Player::UpdateAnimations()
-{
-	AnimationUpdateTimer += Stats::DeltaTime;
-	if (AnimationUpdateTimer < 0.1f)
-	{
-		return;
-	}
-	AnimationUpdateTimer = 0;
-	Vector3 PlayerDirection = Movement->GetVelocity() * Vector3(1, 0, 1);
-	PlayerMesh->RelativeTransform.Rotation = Vector3::LookAtFunction(0, PlayerDirection);
 }
 
 float Player::GetScaleValue()
 {
 	switch (Size)
 	{
-	case Player::RobotSize::Small:
-		return 3;
 	case Player::RobotSize::Large:
+		return 1.4f;
+	case Player::RobotSize::Small:
 		return 0.5f;
 	default:
 		return 1;
 	}
 }
 
-bool Player::CanWallJump()
+void Player::UpdateAnimations()
 {
-	return !Movement->GetIsOnGround() && !Movement->LastMoveSuccessful && Movement->GetVelocity().Y > -20;
+	AnimationUpdateTimer += Stats::DeltaTime;
+
+	auto& CurrentAnims = PlayerAnimations[std::min(int(Size), int(PlayerAnimations.size() - 1))];
+
+	size_t NewAnimation = GetActiveAnimationSmall();
+	if (AnimationUpdateTimer < CurrentAnims[CurrentAnimation].Speed && NewAnimation == CurrentAnimation)
+	{
+		return;
+	}
+
+	if (CanWallJump())
+	{
+		AnimationFacing = Movement->LastHitNormal;
+	}
+	else if ((Movement->GetVelocity() * Vector3(1, 0, 1)).Length() >= 5)
+	{
+		AnimationFacing = Movement->GetVelocity();
+	}
+	AnimationFacing.Y = 0;
+	AnimationFacing = AnimationFacing.Normalize();
+
+	CurrentAnimation = NewAnimation;
+
+	AnimationFrame++;
+	if (AnimationFrame >= CurrentAnims[CurrentAnimation].MeshComponents.size())
+	{
+		AnimationFrame = 0;
+	}
+
+	for (auto& i : PlayerAnimations)
+	{
+		for (auto& j : i)
+		{
+			for (auto& k : j.MeshComponents)
+			{
+				k->SetVisibility(false);
+			}
+		}
+	}
+
+	// Weird rotation hack because I exported the models with the wrong rotation.
+	Vector3 Rotation;
+	if (Size != RobotSize::Large)
+	{
+		Rotation = Vector3::LookAtFunction(0, Vector3(AnimationFacing.Z, AnimationFacing.Y, -AnimationFacing.X));
+	}
+	else
+	{
+		Rotation = Vector3::LookAtFunction(0, -AnimationFacing);
+	}
+	for (MeshComponent* m : CurrentAnims[CurrentAnimation].MeshComponents)
+	{
+		m->SetVisibility(CurrentAnims[CurrentAnimation].MeshComponents[AnimationFrame] == m);
+		m->RelativeTransform.Rotation = Rotation;
+	}
+		
+	AnimationUpdateTimer = 0;
+	Vector3 PlayerDirection = Movement->GetVelocity() * Vector3(1, 0, 1);
+}
+
+void Player::CommonMovementLogic()
+{
+	if ((HoldingJump || HoldingGamepadJump) && !Gliding && !IsJumping)
+	{
+		if (Movement->GetIsOnGround())
+		{
+			SpawnJumpParticles();
+			DoubleJumpTimer = 0.25f;
+			Movement->Jump();
+			IsJumping = true;
+			CameraShake::StopAllCameraShake();
+			CameraShake::PlayDefaultCameraShake(1);
+		}
+		else if (!IsJumping && !HasDoubleJumped && DoubleJumpTimer <= 0 && !CanWallJump())
+		{
+			switch (Size)
+			{
+			case Player::RobotSize::Small:
+				Glide();
+				break;
+			case Player::RobotSize::Medium:
+				DoubleJump();
+				break;
+			case Player::RobotSize::Large:
+				Land();
+				break;
+			default:
+				break;
+			}
+		}
+	}
+
+	if (Movement->GetIsOnGround())
+	{
+		if (Movement->StoodOn && typeid(*Movement->StoodOn->GetParent()) == typeid(WaterPlane))
+		{
+			GetTransform().Position = LastSpawnPoint;
+			Movement->SetVelocity(0);
+		}
+		HasDoubleJumped = false;
+	}
+
+	if (CanWallJump())
+	{
+		SlideEffects->SetTransform(Transform(
+			GetTransform().Position - Movement->LastHitNormal,
+			Vector3::LookAtFunction(0, Movement->GetVelocity() * Vector3(1, 0, 1)),
+			1));
+
+		SlideEffects->StartSlide();
+		Vector3 vel = Movement->GetVelocity();
+		if ((HoldingJump || HoldingGamepadJump) && !IsJumping)
+		{
+			vel = (Movement->LastHitNormal + Vector3(0, 1, 0)) * 30 * std::powf(GetScaleValue(), 0.5f);
+			CameraShake::PlayDefaultCameraShake(1);
+			SlideEffects->WallJump();
+		}
+		else
+		{
+			vel -= Movement->LastHitNormal * Stats::DeltaTime * 10;
+		}
+		Landing = false;
+		HasDoubleJumped = false;
+		GlideTimer = 2.0;
+		Movement->SetVelocity(Vector3(vel.X, std::max(-3.0f, vel.Y), vel.Z));
+	}
+	else
+	{
+		SlideEffects->Stop();
+	}
+
+	Movement->AirAccelMultiplier = Size == RobotSize::Large ? 0.4f : (Gliding ? 0.5f : 0.25f);
+}
+
+size_t Player::GetActiveAnimationSmall()
+{
+	// Small Robot gliding
+	if (Gliding)
+		return 5;
+	// Wall Slide
+	if (CanWallJump())
+		return 2;
+	// Jumping (In air, moving up)
+	if (!Movement->GetIsOnGround() && Movement->GetVelocity().Y > 10)
+		return 3;
+	// Falling (In air, moving down)
+	else if (!Movement->GetIsOnGround())
+		return 4;
+	// Walking
+	if (Movement->GetVelocity().Length() > 5 && Movement->GetIsOnGround())
+		return 1;
+
+	// Idle
+	return 0;
+}
+
+size_t Player::GetActiveAnimationMedium()
+{
+	// Wall Slide
+	if (CanWallJump())
+		return 2;
+	// Jumping (In air, moving up)
+	if (!Movement->GetIsOnGround() && Movement->GetVelocity().Y > 10)
+		return 3;
+	// Falling (In air, moving down)
+	else if (!Movement->GetIsOnGround())
+		return 4;
+	// Walking
+	if (Movement->GetVelocity().Length() > 5 && Movement->GetIsOnGround())
+		return 1;
+
+	// Idle
+	return 0;
+}
+
+void Player::SmallRobotLogic()
+{
+	MediumHoverEffect->SetActive(false);
+
+	if (Movement->GetIsOnGround())
+	{
+		GlideTimer = 2.0;
+		Gliding = false;
+	}
+
+	SmallJumpThrust->SetActive(Gliding);
+	if (Gliding && !HoldingJump && !HoldingGamepadJump)
+	{
+		Gliding = false;
+	}
+
+	if (!Gliding)
+	{
+		return;
+	}
+
+	GlideTimer = std::max(GlideTimer - Stats::DeltaTime, -1.0f);
+
+	Movement->SetVelocity(Movement->GetVelocity() * Vector3(1, 0, 1) + Vector3(0, GlideTimer * 5, 0));
+	CameraShake::PlayDefaultCameraShake(Stats::DeltaTime * 5.0f);
+}
+
+void Player::MediumRobotLogic()
+{
+	MediumHoverEffect->SetActive(true);
+	SmallJumpThrust->SetActive(false);
+	Gliding = false;
+}
+
+void Player::LargeRobotLogic()
+{
+	SmallJumpThrust->SetActive(false);
+	MediumHoverEffect->SetActive(false);
+
+	if (Landing && !HoldingJump && !HoldingGamepadJump)
+	{
+		Landing = false;
+	}
+	if (Landing)
+	{
+		LandingTimer = 1;
+	}
+	else
+	{
+		LandingTimer -= Stats::DeltaTime;
+	}
+}
+
+bool Player::CanWallJump() const
+{
+	return !Movement->GetIsOnGround() && !Movement->LastMoveSuccessful && Movement->GetVelocity().Y > -40 && Size != RobotSize::Large && !Gliding;
 }
 
 void Player::SpawnJumpParticles()
@@ -243,10 +429,52 @@ void Player::SpawnJumpParticles()
 void Player::ApplyScale()
 {
 	float Scale = GetScaleValue();
-	Movement->Deceleration = 125 * Scale;
-	Movement->Acceleration = 125 * Scale;
-	Movement->JumpHeight = 30 * Scale;
+	Movement->Deceleration = Size != RobotSize::Large ? 125 * Scale : 50;
+	Movement->Acceleration = Size != RobotSize::Large ? 125 * Scale : 100;
+	Movement->JumpHeight = Size != RobotSize::Large ? 30 : 85;
 	Movement->ColliderSize = Vector2(Scale * 2, Scale);
-	Movement->MaxSpeed = 35 * Scale;
-	PlayerMesh->RelativeTransform.Scale = Vector3(Scale, std::powf(Scale, 1.5f), Scale);
+	Movement->MaxSpeed = 35 * std::pow(Scale, 0.75f);
+}
+
+void Player::DoubleJump()
+{
+	Vector3 Velocity = Movement->GetVelocity();
+	Movement->SetVelocity(Vector3(Velocity.X, 40 * GetScaleValue(), Velocity.Z));
+	SpawnJumpParticles();
+	HasDoubleJumped = true;
+	IsJumping = true;
+	CameraShake::PlayDefaultCameraShake(1);
+}
+
+void Player::Glide()
+{
+	CameraShake::PlayDefaultCameraShake(0.35f);
+	Gliding = true;
+	IsJumping = true;
+}
+
+void Player::Land()
+{
+	Landing = true;
+}
+
+void Player::LoadAnimations()
+{
+	for (auto& Anims : PlayerAnimations)
+	{
+		for (Animation& Anim : Anims)
+		{
+			Anim.MeshComponents.clear();
+			for (const std::string& File : Anim.MeshFiles)
+			{
+				MeshComponent* NewComponent = new MeshComponent();
+				Attach(NewComponent);
+				NewComponent->Load(File);
+				NewComponent->RelativeTransform.Scale = Anim.Scale;
+				NewComponent->SetVisibility(false);
+				Anim.MeshComponents.push_back(NewComponent);
+			}
+		}
+	}
+	UpdateAnimations();
 }

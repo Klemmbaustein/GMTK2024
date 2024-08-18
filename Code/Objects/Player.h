@@ -20,14 +20,12 @@ public:
 
 	MoveComponent* Movement = new MoveComponent();
 	CameraComponent* PlayerCamera = new CameraComponent();
-	MeshComponent* PlayerMesh = new MeshComponent();
 	PhysicsComponent* CameraCollider = new PhysicsComponent();
 
 	WallSlideEffects* SlideEffects = nullptr;
 
 	void UpdateAnimations();
 
-	float AnimationUpdateTimer = 0;
 
 	enum class RobotSize
 	{
@@ -40,15 +38,51 @@ public:
 
 	float GetScaleValue();
 
+
 private:
 
-	bool CanWallJump();
+	struct Animation
+	{
+		float Scale;
+		float Speed;
+		std::vector<std::string> MeshFiles;
+		std::vector<MeshComponent*> MeshComponents;
+	};
+	ParticleComponent* SmallJumpThrust = new ParticleComponent();
+	ParticleComponent* MediumHoverEffect = new ParticleComponent();
+
+	Vector3 AnimationFacing;
+
+	static std::vector<std::vector<Animation>> PlayerAnimations;
+	size_t CurrentAnimation = SIZE_MAX;
+	size_t AnimationFrame = 0;
+	float AnimationUpdateTimer = 0;
+
+	void CommonMovementLogic();
+	size_t GetActiveAnimationSmall();
+	size_t GetActiveAnimationMedium();
+
+	void SmallRobotLogic();
+	void MediumRobotLogic();
+	void LargeRobotLogic();
+
+	bool CanWallJump() const;
 	void SpawnJumpParticles();
 	void ApplyScale();
+
+	void DoubleJump();
+	void Glide();
+	void Land();
+	float GlideTimer = 0;
+
+	void LoadAnimations();
 
 	bool HoldingJump = false;
 	bool HoldingGamepadJump = false;
 	bool IsJumping = false;
 	bool HasDoubleJumped = false;
 	float DoubleJumpTimer = 0;
+	bool Gliding = false;
+	float LandingTimer = 0;
+	bool Landing = false;
 };

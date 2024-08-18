@@ -1,4 +1,6 @@
 #include <string>
+#include <Engine/EngineError.h>
+#include <thread>
 
 namespace Project
 {
@@ -11,8 +13,8 @@ namespace Project
 		return "Untitled";
 	}
 	
-	// This function will be called on startup.
 	void OnLaunch()
 	{
+		//ENGINE_ASSERT(std::thread::hardware_concurrency() >= 32, "At least 32 threads are required to run this game");
 	}
 }

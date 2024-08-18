@@ -19,8 +19,9 @@ void WallSlideEffects::StartSlide()
 {
 	if (!SlideParticle->GetActive())
 	{
-		SlideParticle->Reset();
+		JumpParticle->SetActive(false);
 		JumpParticle->Reset();
+		SlideParticle->Reset();
 	}
 	SlideParticle->SetActive(true);
 }

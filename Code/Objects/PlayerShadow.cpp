@@ -1,5 +1,6 @@
 #include "PlayerShadow.h"
 #include <Engine/Log.h>
+#include <Engine/Input.h>
 
 void PlayerShadow::Begin()
 {
@@ -22,4 +23,9 @@ void PlayerShadow::Update()
 		GetTransform().Rotation = Vector3::LookAtFunctionY(0, Cast.Normal);
 	}
 	GetTransform().Scale = Parent->GetScaleValue() * 2;
+
+	if (Input::IsKeyDown(Input::Key::c))
+	{
+		Parent->GetTransform().Position = GetTransform().Position;
+	}
 }
