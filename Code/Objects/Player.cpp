@@ -332,7 +332,7 @@ void Player::CommonMovementLogic()
 		Vector3 vel = Movement->GetVelocity();
 		if ((HoldingJump || HoldingGamepadJump) && !IsJumping)
 		{
-			vel = (Movement->LastHitNormal + Vector3(0, 1, 0)) * 30 * std::powf(GetScaleValue(), 0.5f);
+			vel = (Movement->LastHitNormal + Vector3(0, 1, 0)) * 30 * std::pow(GetScaleValue(), 0.5f);
 			CameraShake::PlayDefaultCameraShake(1);
 			SlideEffects->WallJump();
 			Sound::PlaySound2D(Sounds::WallJump, Random::GetRandomFloat(0.9f, 1.1f), 0.5f);
@@ -470,7 +470,7 @@ void Player::SpawnJumpParticles()
 {
 	float Scale = GetScaleValue();
 	Transform ParticleTransform = GetTransform();
-	ParticleTransform.Position -= Vector3(0, std::powf(Scale, 1.5f) * 2, 0);
+	ParticleTransform.Position -= Vector3(0, std::pow(Scale, 1.5f) * 2, 0);
 	Objects::SpawnObject<ParticleObject>(ParticleTransform)->LoadParticle("JumpDust");
 }
 
