@@ -3,7 +3,9 @@
 #include <Objects/Components/MeshComponent.h>
 #include <Objects/ParticleObject.h>
 #include <Engine/Subsystem/Scene.h>
+#include <UI/TextScreen.h>
 #include <Engine/Log.h>
+#include <Sounds.h>
 
 static std::set<std::string> PickedUp = {};
 
@@ -33,7 +35,7 @@ void FuelCan::Update()
 #endif
 	GetTransform().Rotation = Vector3(sin(Stats::Time) * 45, Vector3(Stats::Time).RadiansToDegrees().X, 0);
 
-	if (Vector3::Distance(Player::Current->GetTransform().Position, GetTransform().Position) < 10)
+	if (Vector3::Distance(Player::Current->GetTransform().Position, GetTransform().Position) < std::max(7 * Player::Current->GetScaleValue(), 7.0f))
 	{
 		Objects::DestroyObject(this);
 		Transform SpawnTransform = GetTransform();
@@ -41,5 +43,16 @@ void FuelCan::Update()
 		Objects::SpawnObject<ParticleObject>(SpawnTransform)->LoadParticle("FuelCanPickup");
 		Player::Score++;
 		PickedUp.insert(GetCanID(this));
+		Sound::PlaySound2D(Sounds::FuelCan, 1, 0.5f);
+
+		if (Player::Score >= 25)
+		{
+			auto scr = UICanvas::CreateNewCanvas<TextScreen>();
+			scr->AddText("Thanks for playing!");
+			scr->AddText("You have collected enough fuel for the robot factory to expand more.");
+			scr->TargetScene = "Menu";
+			Player::Current->Movement->Active = false;
+			Player::Current->HasControl = false;
+		}
 	}
 }

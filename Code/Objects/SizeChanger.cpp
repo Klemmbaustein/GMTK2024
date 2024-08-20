@@ -9,7 +9,7 @@ void SizeChanger::Begin()
 {
 	auto Mesh = new MeshComponent();
 	Attach(Mesh);
-	Mesh->Load("Teleporter");
+	Mesh->Load("SizeChanger");
 	Mesh->RelativeTransform.Scale = 2;
 	Mesh->CastStaticShadow = false;
 

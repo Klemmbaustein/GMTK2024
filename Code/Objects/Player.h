@@ -7,6 +7,7 @@
 #include <Objects/Components/MeshComponent.h>
 #include <Objects/Components/PhysicsComponent.h>
 #include <Engine/Gamepad.h>
+#include <Engine/Subsystem/Sound.h>
 #include <UI/GameUI.h>
 	
 class Player : public SceneObject
@@ -46,6 +47,8 @@ public:
 	GameUI* UI = UICanvas::CreateNewCanvas<GameUI>();
 	bool PlayerVisible = false;
 	bool HasControl = true;
+
+	Sound::SoundSource JetpackSound;
 
 private:
 

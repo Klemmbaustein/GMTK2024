@@ -34,7 +34,7 @@ GameUI::GameUI()
 
 void GameUI::Tick()
 {
-	ScoreText->SetText(StrUtil::Format("Score: %i", (int)Player::Score));
+	ScoreText->SetText(StrUtil::Format("Score: %i/25", (int)Player::Score));
 
 	if (TransitionProgress < 2)
 	{

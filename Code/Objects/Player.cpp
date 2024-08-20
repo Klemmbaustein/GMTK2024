@@ -11,6 +11,8 @@
 #include <Objects/Teleporter.h>
 #include <Objects/SizeChanger.h>
 #include <Engine/Log.h>
+#include <Sounds.h>
+#include <Engine/EngineRandom.h>
 
 Player* Player::Current = nullptr;
 uint64_t Player::Score = 0;
@@ -18,7 +20,6 @@ Player::RobotSize Player::Size = Player::RobotSize::Medium;
 void Player::Begin()
 {
 	float Scale = GetScaleValue();
-	Movement->ColliderSize = Scale;
 	Attach(Movement);
 	Movement->AirAccelMultiplier = 0.25f;
 
@@ -48,6 +49,8 @@ void Player::Begin()
 	MediumHoverEffect->RelativeTransform.Position.Y = -2.5f;
 	MediumHoverEffect->SetActive(false);
 
+	Sounds::Load();
+	JetpackSound = Sound::PlaySound2D(Sounds::Jetpack, 1, 0, true);
 	Current = this;
 }
 
@@ -149,19 +152,6 @@ void Player::Update()
 	UpdateAnimations();
 
 	Movement->Gravity = Landing ? 600 : (HoldingJump || HoldingGamepadJump ? 50 : 100) * Scale;
-
-	if (Input::IsKeyDown(Input::Key::k1))
-	{
-		Size = RobotSize::Small;
-	}
-	if (Input::IsKeyDown(Input::Key::k2))
-	{
-		Size = RobotSize::Medium;
-	}
-	if (Input::IsKeyDown(Input::Key::k3))
-	{
-		Size = RobotSize::Large;
-	}
 }
 
 void Player::GamepadInput(Input::Gamepad& Gamepad)
@@ -217,6 +207,10 @@ void Player::UpdateAnimations()
 
 	CurrentAnimation = NewAnimation;
 
+	if (CurrentAnimation == 1 && AnimationFrame % 2 == 0 && Size != RobotSize::Large)
+	{
+		Sound::PlaySound2D(Sounds::WallJump, Random::GetRandomFloat(0.9f, 1.1f), 0.3f);
+	}
 	AnimationFrame++;
 	if (AnimationFrame >= CurrentAnims[CurrentAnimation].MeshComponents.size())
 	{
@@ -270,7 +264,7 @@ void Player::CommonMovementLogic()
 				HasControl = false;
 				return;
 			}
-			if (Movement->StoodOn && Movement->StoodOn->GetParent()->GetObjectDescription().ID == SizeChanger::GetID())
+			if (Movement->StoodOn && Movement->StoodOn->GetParent()->GetObjectDescription().ID == SizeChanger::GetID() && !UI->InTransition())
 			{
 				SizeChanger* tp = static_cast<SizeChanger*>(Movement->StoodOn->GetParent());
 				tp->Use();
@@ -282,6 +276,7 @@ void Player::CommonMovementLogic()
 			Movement->Jump();
 			IsJumping = true;
 			CameraShake::StopAllCameraShake();
+			Sound::PlaySound2D(Sounds::Jump, Random::GetRandomFloat(0.9f, 1.1f), 0.5f);
 			CameraShake::PlayDefaultCameraShake(1);
 		}
 		else if (!IsJumping && !HasDoubleJumped && DoubleJumpTimer <= 0 && !CanWallJump())
@@ -313,6 +308,7 @@ void Player::CommonMovementLogic()
 			MediumHoverEffect->SetActive(false);
 			SmallJumpThrust->SetActive(false);
 			Objects::SpawnObject<ParticleObject>(GetTransform())->LoadParticle("WaterImpact");
+			Sound::PlaySound2D(Sounds::WaterSplash, Random::GetRandomFloat(0.9f, 1.1f), 0.5f);
 
 			UI->StartTransition([this]() {
 				GetTransform().Position = LastSpawnPoint + Vector3(0, GetScaleValue() * 25, 0);
@@ -339,6 +335,7 @@ void Player::CommonMovementLogic()
 			vel = (Movement->LastHitNormal + Vector3(0, 1, 0)) * 30 * std::powf(GetScaleValue(), 0.5f);
 			CameraShake::PlayDefaultCameraShake(1);
 			SlideEffects->WallJump();
+			Sound::PlaySound2D(Sounds::WallJump, Random::GetRandomFloat(0.9f, 1.1f), 0.5f);
 		}
 		else
 		{
@@ -401,6 +398,7 @@ size_t Player::GetActiveAnimationMedium()
 void Player::SmallRobotLogic()
 {
 	MediumHoverEffect->SetActive(false);
+	JetpackSound.SetVolume(Gliding ? 0.5f : 0);
 
 	if (Movement->GetIsOnGround())
 	{
@@ -453,6 +451,7 @@ void Player::LargeRobotLogic()
 			Objects::SpawnObject<ParticleObject>(Bricks->GetTransform())->LoadParticle("BreakBricks");
 			Bricks->Break();
 		}
+		Sound::PlaySound2D(Sounds::Impact, Random::GetRandomFloat(0.9f, 1.1f), 0.5f);
 		Movement->StoodOn = nullptr;
 	}
 
@@ -493,6 +492,7 @@ void Player::DoubleJump()
 	HasDoubleJumped = true;
 	IsJumping = true;
 	CameraShake::PlayDefaultCameraShake(1);
+	Sound::PlaySound2D(Sounds::DoubleJump, 1, 0.5f);
 }
 
 void Player::Glide()

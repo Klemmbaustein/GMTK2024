@@ -1,5 +1,6 @@
 #include "Checkpoint.h"
 #include <Objects/Player.h>
+#include <Sounds.h>
 
 void Checkpoint::Begin()
 {
@@ -25,6 +26,9 @@ void Checkpoint::Update()
 	if (Vector3::Distance(Player::Current->GetTransform().Position, GetTransform().Position) < 10)
 	{
 		Player::Current->LastSpawnPoint = GetTransform().Position;
+
+		if (!Active)
+			Sound::PlaySound2D(Sounds::FuelCan, 1, 0.5f);
 	}
 
 
