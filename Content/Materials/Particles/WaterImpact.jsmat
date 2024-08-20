@@ -1,0 +1,11 @@
+string VertexShader = "basic.vert"
+string FragmentShader = "particle.frag"
+bool UseShadowCutout = 0
+bool IsTranslucent = 0
+texture u_texture = 
+{
+	string File = "WaterSplash"
+	int Filtering = 0
+	int Wrap = 0
+}
+float u_opacity = 1

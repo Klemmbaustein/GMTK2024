@@ -18,6 +18,7 @@ void main()
 	texCoords /= 25;
 
 	float brightWaterIntensity = clamp(sin(u_time + v_position.x / 30.0) * cos(u_time + v_position.z / 30.0), 0, 1);
+	texCoords += brightWaterIntensity / 10;
 
 	float waterIntensity = clamp(texture(u_texture, texCoords).r + v_screenposition.z / 300, 0, 1);
 	vec3 color = mix(mix(u_waterColor, u_brightWaterColor, brightWaterIntensity), vec3(1), waterIntensity);

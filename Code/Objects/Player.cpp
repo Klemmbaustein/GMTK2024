@@ -2,16 +2,19 @@
 #include <Engine/Input.h>
 #include <Engine/Stats.h>
 #include <Math/Physics/Physics.h>
-#include <Engine/Log.h>
 #include <algorithm>
 #include <Objects/ParticleObject.h>
 #include <Objects/PlayerShadow.h>
+#include <Objects/BrickBlock.h>
 #include <Rendering/Camera/CameraShake.h>
 #include "WaterPlane.h"
-#include <Engine/EngineError.h>
+#include <Objects/Teleporter.h>
+#include <Objects/SizeChanger.h>
+#include <Engine/Log.h>
 
-
-
+Player* Player::Current = nullptr;
+uint64_t Player::Score = 0;
+Player::RobotSize Player::Size = Player::RobotSize::Medium;
 void Player::Begin()
 {
 	float Scale = GetScaleValue();
@@ -44,6 +47,8 @@ void Player::Begin()
 	MediumHoverEffect->LoadParticle("Hover");
 	MediumHoverEffect->RelativeTransform.Position.Y = -2.5f;
 	MediumHoverEffect->SetActive(false);
+
+	Current = this;
 }
 
 void Player::Update()
@@ -59,13 +64,6 @@ void Player::Update()
 	PlayerCamera->RelativeTransform.Rotation.Z = OnWallShake;
 
 	Vector3 CameraRotation = Vector3(0, PlayerCamera->RelativeTransform.Rotation.Y, 0);
-	
-
-	HoldingGamepadJump = false;
-	for (auto& i : Input::Gamepads)
-	{
-		GamepadInput(i.second);
-	}
 
 	PlayerCamera->RelativeTransform.Rotation.X = std::clamp(PlayerCamera->RelativeTransform.Rotation.X, -80.0f, 25.0f);
 
@@ -77,7 +75,7 @@ void Player::Update()
 		Transform(CameraPosition, 0, 0.5f),
 		CameraEndPosition,
 		Physics::Layer::Static,
-		{this}
+		{ this }
 	);
 
 	if (CameraHit.Hit)
@@ -87,6 +85,17 @@ void Player::Update()
 	else
 	{
 		PlayerCamera->RelativeTransform.Position = CameraEndPosition - GetTransform().Position;
+	}
+
+	if (!HasControl)
+	{
+		return;
+	}
+
+	HoldingGamepadJump = false;
+	for (auto& i : Input::Gamepads)
+	{
+		GamepadInput(i.second);
 	}
 
 	if (Input::IsKeyDown(Input::Key::w))
@@ -190,7 +199,7 @@ void Player::UpdateAnimations()
 	auto& CurrentAnims = PlayerAnimations[std::min(int(Size), int(PlayerAnimations.size() - 1))];
 
 	size_t NewAnimation = GetActiveAnimationSmall();
-	if (AnimationUpdateTimer < CurrentAnims[CurrentAnimation].Speed && NewAnimation == CurrentAnimation)
+	if ((AnimationUpdateTimer < CurrentAnims[CurrentAnimation].Speed && NewAnimation == CurrentAnimation) && !PlayerVisible)
 	{
 		return;
 	}
@@ -225,6 +234,9 @@ void Player::UpdateAnimations()
 		}
 	}
 
+	if (PlayerVisible)
+		return;
+
 	// Weird rotation hack because I exported the models with the wrong rotation.
 	Vector3 Rotation;
 	if (Size != RobotSize::Large)
@@ -251,6 +263,20 @@ void Player::CommonMovementLogic()
 	{
 		if (Movement->GetIsOnGround())
 		{
+			if (Movement->StoodOn && Movement->StoodOn->GetParent()->GetObjectDescription().ID == Teleporter::GetID())
+			{
+				Teleporter* tp = static_cast<Teleporter*>(Movement->StoodOn->GetParent());
+				tp->Use();
+				HasControl = false;
+				return;
+			}
+			if (Movement->StoodOn && Movement->StoodOn->GetParent()->GetObjectDescription().ID == SizeChanger::GetID())
+			{
+				SizeChanger* tp = static_cast<SizeChanger*>(Movement->StoodOn->GetParent());
+				tp->Use();
+				HasControl = false;
+				return;
+			}
 			SpawnJumpParticles();
 			DoubleJumpTimer = 0.25f;
 			Movement->Jump();
@@ -277,12 +303,24 @@ void Player::CommonMovementLogic()
 		}
 	}
 
-	if (Movement->GetIsOnGround())
+	if (Movement->GetIsOnGround() && !UI->InTransition())
 	{
 		if (Movement->StoodOn && typeid(*Movement->StoodOn->GetParent()) == typeid(WaterPlane))
 		{
-			GetTransform().Position = LastSpawnPoint;
 			Movement->SetVelocity(0);
+			PlayerVisible = true;
+			UpdateAnimations();
+			MediumHoverEffect->SetActive(false);
+			SmallJumpThrust->SetActive(false);
+			Objects::SpawnObject<ParticleObject>(GetTransform())->LoadParticle("WaterImpact");
+
+			UI->StartTransition([this]() {
+				GetTransform().Position = LastSpawnPoint + Vector3(0, GetScaleValue() * 25, 0);
+				HasControl = true;
+				PlayerVisible = false;
+				});
+			HasControl = false;
+			return;
 		}
 		HasDoubleJumped = false;
 	}
@@ -399,17 +437,28 @@ void Player::LargeRobotLogic()
 	SmallJumpThrust->SetActive(false);
 	MediumHoverEffect->SetActive(false);
 
+	if (Landing && Movement->GetIsOnGround())
+	{
+		Landing = false;
+		CameraShake::PlayDefaultCameraShake(1);
+
+		if (!Movement->StoodOn)
+		{
+			return;
+		}
+
+		auto Bricks = dynamic_cast<BrickBlock*>(Movement->StoodOn->GetParent());
+		if (Bricks)
+		{
+			Objects::SpawnObject<ParticleObject>(Bricks->GetTransform())->LoadParticle("BreakBricks");
+			Bricks->Break();
+		}
+		Movement->StoodOn = nullptr;
+	}
+
 	if (Landing && !HoldingJump && !HoldingGamepadJump)
 	{
 		Landing = false;
-	}
-	if (Landing)
-	{
-		LandingTimer = 1;
-	}
-	else
-	{
-		LandingTimer -= Stats::DeltaTime;
 	}
 }
 

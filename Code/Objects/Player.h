@@ -7,6 +7,7 @@
 #include <Objects/Components/MeshComponent.h>
 #include <Objects/Components/PhysicsComponent.h>
 #include <Engine/Gamepad.h>
+#include <UI/GameUI.h>
 	
 class Player : public SceneObject
 {
@@ -33,11 +34,18 @@ public:
 		Medium,
 		Large
 	};
-	RobotSize Size = RobotSize::Medium;
+	static RobotSize Size;
 	Vector3 LastSpawnPoint;
 
 	float GetScaleValue();
 
+	static Player* Current;
+
+	static uint64_t Score;
+
+	GameUI* UI = UICanvas::CreateNewCanvas<GameUI>();
+	bool PlayerVisible = false;
+	bool HasControl = true;
 
 private:
 
@@ -52,11 +60,13 @@ private:
 	ParticleComponent* MediumHoverEffect = new ParticleComponent();
 
 	Vector3 AnimationFacing;
+	float DoubleJumpTimer = 0;
 
 	static std::vector<std::vector<Animation>> PlayerAnimations;
 	size_t CurrentAnimation = SIZE_MAX;
 	size_t AnimationFrame = 0;
 	float AnimationUpdateTimer = 0;
+	float GlideTimer = 0;
 
 	void CommonMovementLogic();
 	size_t GetActiveAnimationSmall();
@@ -73,7 +83,6 @@ private:
 	void DoubleJump();
 	void Glide();
 	void Land();
-	float GlideTimer = 0;
 
 	void LoadAnimations();
 
@@ -81,8 +90,6 @@ private:
 	bool HoldingGamepadJump = false;
 	bool IsJumping = false;
 	bool HasDoubleJumped = false;
-	float DoubleJumpTimer = 0;
 	bool Gliding = false;
-	float LandingTimer = 0;
 	bool Landing = false;
 };

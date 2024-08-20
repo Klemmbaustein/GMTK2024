@@ -1,0 +1,10 @@
+string VertexShader = "basic.vert"
+string FragmentShader = "fan.frag"
+bool UseShadowCutout = 0
+bool IsTranslucent = 1
+texture u_fanTexture = 
+{
+	string File = "Wind"
+	int Filtering = 0
+	int Wrap = 2
+}
